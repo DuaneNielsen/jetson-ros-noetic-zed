@@ -12,8 +12,15 @@ ENV ROS_PYTHON_VERSION=3
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-WORKDIR /workspace
+# Glow documentation
+RUN apt-get update && \
+    sudo mkdir -p /etc/apt/keyrings && \
+    sudo apt-get install curl -y && \
+    curl -fsSL https://repo.charm.sh/apt/gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/charm.gpg && \
+    echo "deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *" | sudo tee /etc/apt/sources.list.d/charm.list && \
+    sudo apt update && sudo apt install glow
 
+WORKDIR /workspace
 
 #
 # add the ROS deb repo to the apt sources list
@@ -95,12 +102,19 @@ RUN apt-get install --no-install-recommends python3 python3-pip python3-dev pyth
 #This symbolic link is needed to use the streaming features on Jetson inside a container
 RUN ln -sf /usr/lib/aarch64-linux-gnu/tegra/libv4l2.so.0 /usr/lib/aarch64-linux-gnu/libv4l2.so
 
-RUN apt-get update
 
+# ZED node with custom yolov7
+RUN mkdir /workspace/zed_catkin_ws && \
+    mkdir /workspace/zed_catkin_ws/src
+RUN sudo apt-get update && sudo apt-get -y install git-lfs
+WORKDIR /workspace/zed_catkin_ws/src
+ARG YOLO_VERSION=0.2
+RUN git clone https://huggingface.co/Duane/zed-ros-yolo-weights
+ADD https://api.github.com/repos/duanenielsen/zed-ros-wrapper/git/refs/heads/master zed_ros_wrapper_git_version.json
+RUN git clone --recursive https://github.com/duanenielsen/zed-ros-wrapper.git
+RUN apt-get update
 RUN . /opt/ros/$ROS_DISTRO/setup.sh && \
-    cd /workspace/ros_catkin_ws/src/ && \
-    git clone --recursive https://github.com/stereolabs/zed-ros-wrapper.git && \
-    cd .. && \
+    cd /workspace/zed_catkin_ws/ && \
     rosdep install --from-paths src --ignore-src -r -y && \
     catkin_make -DCMAKE_BUILD_TYPE=Release
 
@@ -110,6 +124,8 @@ RUN . /opt/ros/$ROS_DISTRO/setup.sh && \
 #
 COPY ros_entrypoint.sh /ros_entrypoint.sh
 RUN echo 'source /opt/ros/${ROS_DISTRO}/setup.bash' >> /root/.bashrc
+COPY README.md /root/README.md
+RUN echo 'glow ~/README.md' >> /root/.bashrc
 ENTRYPOINT ["/ros_entrypoint.sh"]
 CMD ["bash"]
 WORKDIR /
